@@ -1,0 +1,62 @@
+name: Monthly Overture places extract
+
+on:
+  schedule:
+    - cron: '0 3 25 * *' # the 25th, after Overture's mid-month release
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Overture release (empty = latest)'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extract
+  cancel-in-progress: false
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Extract
+        run: python extract.py --out site ${{ inputs.release && format('--release {0}', inputs.release) || '' }}
+      - name: Publish one release per market, then point latest.json at them
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          release=$(python -c "import json;print(json.load(open('site/latest.json'))['release'])")
+          for dir in site/"$release"/*/; do
+            cc=$(basename "$dir")
+            tag="$release-$cc"
+            gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+            gh release create "$tag" --title "Overture places $release ($cc)" --notes "Extract of Overture Maps Places $release. Licences and attribution: LICENSE-DATA.md and NOTICE (attached)." --latest=false
+            # Upload in batches to stay well inside request limits.
+            find "$dir" -name '*.ndjson.gz' -print0 | xargs -0 -n 50 gh release upload "$tag" --clobber
+            # The licence texts, the attribution and the NOTICE travel with every copy of the data.
+            gh release upload "$tag" --clobber LICENSE-DATA.md NOTICE LICENSE-CDLA-Permissive-2.0.txt LICENSE-Apache-2.0.txt LICENSE-CC0-1.0.txt
+          done
+          cp site/latest.json latest.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add latest.json
+          git diff --cached --quiet || git commit -m "Point latest.json at Overture $release"
+          git push
+      - name: Keep only the two newest extracts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          keep=$(gh release list --limit 200 --json tagName --jq '[.[].tagName | capture("^(?<r>[0-9-]+\\.[0-9]+)-").r] | unique | sort | reverse | .[0:2] | join(" ")')
+          for tag in $(gh release list --limit 200 --json tagName --jq '.[].tagName'); do
+            r=${tag%-*}
+            case " $keep " in *" $r "*) ;; *) gh release delete "$tag" --yes --cleanup-tag ;; esac
+          done

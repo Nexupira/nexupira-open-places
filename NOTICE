@@ -1,0 +1,10 @@
+nexupira-open-places — data NOTICE
+
+This repository's release assets contain data derived from the Overture Maps Foundation Places theme.
+
+Portions of this data are from Foursquare:
+Copyright 2024 Foursquare Labs, Inc. All rights reserved.
+Licensed under the Apache License, Version 2.0 (see LICENSE-Apache-2.0.txt).
+Foursquare data was transformed to the Overture schema by Overture Maps Foundation, then filtered and reduced to a few fields (see LICENSE-DATA.md).
+
+Other portions are available under CDLA-Permissive-2.0 (LICENSE-CDLA-Permissive-2.0.txt) and CC0-1.0 (LICENSE-CC0-1.0.txt). Attribution: LICENSE-DATA.md.
